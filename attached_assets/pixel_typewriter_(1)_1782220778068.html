@@ -1,0 +1,489 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Pixel Typewriter</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0;}
+html,body{
+  background:#7AAABB;
+  display:flex;flex-direction:column;
+  align-items:center;justify-content:center;
+  min-height:100vh;
+  font-family:monospace;
+}
+#wrap{outline:none;cursor:default;display:flex;flex-direction:column;align-items:center;}
+#hint{color:rgba(255,255,255,0.72);font-size:11px;margin-top:10px;letter-spacing:0.07em;}
+</style>
+</head>
+<body>
+<div id="wrap" tabindex="0">
+  <div style="position:relative;">
+    <canvas id="c"></canvas>
+    <!-- paper text overlay, positioned after draw() sets coords -->
+    <div id="pover" style="position:absolute;overflow:hidden;pointer-events:none;">
+      <div id="ptxt" style="
+        font-family:'Courier New',monospace;
+        color:#3a2510;
+        line-height:1.55;
+        white-space:pre;
+        letter-spacing:0.04em;
+      "></div><span id="blink" style="display:inline-block;background:#3a2510;vertical-align:bottom;"></span>
+    </div>
+  </div>
+  <div id="hint">click here, then type</div>
+</div>
+
+<script>
+// ─── Canvas setup ───────────────────────────────────────────────
+const canvas = document.getElementById('c');
+const ctx = canvas.getContext('2d');
+
+// We design at 2x for sharpness, display at 1x via CSS
+const DPR = 2;
+const CW = 560;
+let CH_current = 620;
+canvas.width  = CW * DPR;
+canvas.height = CH_current * DPR;
+canvas.style.width  = CW + 'px';
+canvas.style.height = CH_current + 'px';
+ctx.scale(DPR, DPR);
+
+// ─── Colour palette ─────────────────────────────────────────────
+const COL = {
+  // body
+  bodyTop:    '#c8dae2', bodyMid:  '#b0c8d4', bodyBot:  '#8faab8',
+  bodyHL:     '#dceef5', bodyShad: '#7090a0',
+  // platen (roller bar)
+  platen:     '#1e2a34', platenHL: '#3a5060', platenSh: '#0e1a22',
+  // knobs
+  knob:       '#6aa0b0', knobHL:   '#8cc0cc', knobDark: '#3a6070',
+  // lever
+  lever:      '#a0bcc4', leverDk:  '#607880',
+  // paper
+  paper:      '#f5e6c8', paperRl:  '#e2cfa0',
+  // typebar comb
+  tbar:       '#2c3e4a', tbarHL:   '#7AAABB',
+  // keyboard area
+  kbBody:     '#1c2830', kbEdge:   '#0a1620',
+  // key cap
+  cap:        '#eee0c4', capSh:    '#c8b090', capPrs:   '#bfa060',
+  capText:    '#1e1008',
+  // chassis / base
+  base:       '#8faab8', baseHL:   '#b8d0da', baseSh:   '#507080',
+  // ribbon
+  ribbon:     '#1a0800',
+  // shadow
+  dropSh:     'rgba(0,0,0,0.22)',
+};
+
+// ─── Geometry constants ─────────────────────────────────────────
+// Paper
+const PAP = { x:160, y:20, w:240, h:220 };
+// Platen roller
+const PLT = { x:100, y:222, w:360, h:36 };
+// Main body (houses typebars + mechanism)
+const BODY = { x:90, y:258, w:380, h:150 };
+// Keyboard panel
+const KB   = { x:80, y:395, w:400, h:170 };
+// Base chassis
+const BASE = { x:72, y:540, w:416, h:36 };
+
+// Key geometry
+const KW=22, KH=20, KSTEP=27;
+const keyRows = [
+  ['Q','W','E','R','T','Y','U','I','O','P'],
+  ['A','S','D','F','G','H','J','K','L'],
+  ['Z','X','C','V','B','N','M']
+];
+// Row y-centers within keyboard panel
+const ROW_CY = [KB.y+30, KB.y+60, KB.y+90];
+
+function rowStartX(n) {
+  const total = n*KW + (n-1)*(KSTEP-KW);
+  return (CW - total) / 2;
+}
+
+// ─── Utility ────────────────────────────────────────────────────
+function rr(x,y,w,h,r,fill,stroke,lw){
+  ctx.beginPath();
+  ctx.moveTo(x+r,y); ctx.lineTo(x+w-r,y);
+  ctx.arcTo(x+w,y,x+w,y+r,r);
+  ctx.lineTo(x+w,y+h-r);
+  ctx.arcTo(x+w,y+h,x+w-r,y+h,r);
+  ctx.lineTo(x+r,y+h);
+  ctx.arcTo(x,y+h,x,y+h-r,r);
+  ctx.lineTo(x,y+r);
+  ctx.arcTo(x,y,x+r,y,r);
+  ctx.closePath();
+  if(fill){ctx.fillStyle=fill;ctx.fill();}
+  if(stroke){ctx.strokeStyle=stroke;ctx.lineWidth=lw||1;ctx.stroke();}
+}
+
+// ─── Draw machine ───────────────────────────────────────────────
+let pressedKey = null;
+let tbarAnim   = 0;  // 0..1, 1=fully up
+
+function draw() {
+  ctx.clearRect(0, 0, CW, CH_current);
+
+  // Background
+  ctx.fillStyle = '#7AAABB';
+  ctx.fillRect(0, 0, CW, CH_current);
+
+  // ── Drop shadow under whole machine
+  ctx.fillStyle = COL.dropSh;
+  rr(72, 564, 416, 24, 12, COL.dropSh);
+
+  // ── BASE CHASSIS ─────────────────────────────────────────
+  rr(BASE.x, BASE.y, BASE.w, BASE.h, 10, COL.base, COL.baseSh, 2);
+  // highlight strip
+  ctx.fillStyle = COL.baseHL;
+  rr(BASE.x+8, BASE.y+4, BASE.w-16, 6, 3, COL.baseHL);
+
+  // ── KEYBOARD PANEL ───────────────────────────────────────
+  rr(KB.x, KB.y, KB.w, KB.h, 8, COL.kbBody, COL.kbEdge, 2);
+  // inner recessed area
+  rr(KB.x+10, KB.y+10, KB.w-20, KB.h-20, 5, '#141e28', COL.kbEdge, 1);
+
+  // ── MAIN BODY ────────────────────────────────────────────
+  rr(BODY.x, BODY.y, BODY.w, BODY.h, 10, COL.bodyMid, COL.bodyShad, 2);
+  // top highlight
+  ctx.fillStyle = COL.bodyHL;
+  rr(BODY.x+12, BODY.y+6, 60, 8, 3, COL.bodyHL);
+  // side shading right
+  ctx.fillStyle = COL.bodyBot;
+  ctx.fillRect(BODY.x+BODY.w-16, BODY.y+10, 10, BODY.h-20);
+
+  // ── TYPEBAR COMB ─────────────────────────────────────────
+  // Arc of typebars fanning out from centre bottom
+  const TB_CX = CW/2, TB_CY = BODY.y + BODY.h - 10;
+  ctx.save();
+  ctx.translate(TB_CX, TB_CY);
+  const N_BARS = 13;
+  for(let i=0; i<N_BARS; i++){
+    const t = (i/(N_BARS-1)) - 0.5;          // -0.5 .. 0.5
+    const angle = t * 0.85;                   // spread angle
+    const isCenter = (i === Math.floor(N_BARS/2));
+    const lifted = isCenter && tbarAnim > 0.05;
+    const barLen = 64;
+    const liftY  = lifted ? -barLen * 0.85 * tbarAnim : 0;
+
+    ctx.save();
+    ctx.rotate(angle);
+    ctx.strokeStyle = lifted ? COL.tbarHL : COL.tbar;
+    ctx.lineWidth = 2.5;
+    ctx.beginPath();
+    ctx.moveTo(0, 0);
+    ctx.lineTo(0, -barLen + liftY);
+    ctx.stroke();
+    // tip
+    if(lifted){
+      ctx.fillStyle = COL.tbarHL;
+      ctx.beginPath(); ctx.arc(0, -barLen+liftY, 4, 0, Math.PI*2); ctx.fill();
+    } else {
+      ctx.fillStyle = COL.tbar;
+      ctx.beginPath(); ctx.arc(0, -barLen, 3, 0, Math.PI*2); ctx.fill();
+    }
+    ctx.restore();
+  }
+  ctx.restore();
+
+  // Ink ribbon
+  ctx.fillStyle = COL.ribbon;
+  ctx.fillRect(BODY.x+50, BODY.y+64, BODY.w-100, 6);
+  // ribbon spool left
+  rr(BODY.x+36, BODY.y+52, 30, 22, 4, '#2a1000', '#1a0800', 1.5);
+  ctx.fillStyle='#3a1800'; ctx.beginPath(); ctx.arc(BODY.x+51, BODY.y+63, 7, 0, Math.PI*2); ctx.fill();
+  // ribbon spool right
+  rr(BODY.x+BODY.w-66, BODY.y+52, 30, 22, 4, '#2a1000', '#1a0800', 1.5);
+  ctx.fillStyle='#3a1800'; ctx.beginPath(); ctx.arc(BODY.x+BODY.w-51, BODY.y+63, 7, 0, Math.PI*2); ctx.fill();
+
+  // ── PLATEN ROLLER ────────────────────────────────────────
+  rr(PLT.x, PLT.y, PLT.w, PLT.h, 8, COL.platen, COL.platenSh, 2.5);
+  // highlight line on roller
+  ctx.fillStyle = COL.platenHL;
+  ctx.fillRect(PLT.x+20, PLT.y+6, PLT.w-40, 4);
+
+  // Spool knobs (left and right of platen)
+  for(let sx of [PLT.x+22, PLT.x+PLT.w-22]){
+    const cy = PLT.y + PLT.h/2;
+    ctx.fillStyle = COL.knobDark;
+    ctx.beginPath(); ctx.arc(sx, cy, 18, 0, Math.PI*2); ctx.fill();
+    ctx.fillStyle = COL.knob;
+    ctx.beginPath(); ctx.arc(sx, cy-1, 14, 0, Math.PI*2); ctx.fill();
+    ctx.fillStyle = COL.knobHL;
+    ctx.beginPath(); ctx.arc(sx-4, cy-5, 5, 0, Math.PI*2); ctx.fill();
+    ctx.fillStyle = COL.knobDark;
+    ctx.beginPath(); ctx.arc(sx, cy-1, 6, 0, Math.PI*2); ctx.fill();
+  }
+
+  // Lever arm (left side)
+  ctx.save();
+  ctx.translate(PLT.x+10, PLT.y+4);
+  ctx.strokeStyle = COL.leverDk; ctx.lineWidth = 7;
+  ctx.lineCap = 'round';
+  ctx.beginPath(); ctx.moveTo(0,0); ctx.lineTo(-34,-44); ctx.stroke();
+  ctx.strokeStyle = COL.lever; ctx.lineWidth = 4;
+  ctx.beginPath(); ctx.moveTo(0,0); ctx.lineTo(-34,-44); ctx.stroke();
+  ctx.fillStyle = COL.lever;
+  ctx.beginPath(); ctx.arc(-34,-44,7,0,Math.PI*2); ctx.fill();
+  ctx.fillStyle = COL.leverDk;
+  ctx.beginPath(); ctx.arc(-34,-44,4,0,Math.PI*2); ctx.fill();
+  ctx.restore();
+
+  // Paper guide rails (thin strips at paper edges)
+  ctx.fillStyle = COL.platenHL;
+  ctx.fillRect(PAP.x-8, PLT.y-4, 6, 28);
+  ctx.fillRect(PAP.x+PAP.w+2, PLT.y-4, 6, 28);
+
+  // ── PAPER ────────────────────────────────────────────────
+  ctx.fillStyle = COL.paper;
+  ctx.fillRect(PAP.x, PAP.y, PAP.w, PAP.h);
+  // ruled lines
+  ctx.strokeStyle = COL.paperRl; ctx.lineWidth = 0.5;
+  for(let py = PAP.y+32; py < PAP.y+PAP.h-4; py+=14){
+    ctx.beginPath(); ctx.moveTo(PAP.x+6, py); ctx.lineTo(PAP.x+PAP.w-6, py); ctx.stroke();
+  }
+  // paper side shadows
+  ctx.fillStyle = 'rgba(0,0,0,0.06)';
+  ctx.fillRect(PAP.x, PAP.y, 5, PAP.h);
+  ctx.fillRect(PAP.x+PAP.w-5, PAP.y, 5, PAP.h);
+  ctx.fillRect(PAP.x, PAP.y+PAP.h-8, PAP.w, 8);
+
+  // ── KEYS ─────────────────────────────────────────────────
+  for(let r=0; r<keyRows.length; r++){
+    const n   = keyRows[r].length;
+    const sx  = rowStartX(n);
+    const cy  = ROW_CY[r];
+    for(let c=0; c<n; c++){
+      const kx = sx + c*KSTEP;
+      const ky = cy - KH/2;
+      const k  = keyRows[r][c];
+      const pressed = pressedKey && pressedKey.row===r && pressedKey.col===c;
+      const dy = pressed ? 3 : 0;
+
+      // outer shadow
+      rr(kx, ky+dy+3, KW, KH, 4, COL.capSh);
+      // cap face
+      rr(kx, ky+dy, KW, KH, 4, pressed ? COL.capPrs : COL.cap);
+      // top highlight
+      if(!pressed){
+        ctx.fillStyle='rgba(255,255,255,0.5)';
+        ctx.fillRect(kx+3, ky+3, KW-6, 5);
+      }
+      // letter
+      ctx.fillStyle = COL.capText;
+      ctx.font = 'bold 9px monospace';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(k, kx+KW/2, ky+KH/2+dy);
+    }
+  }
+
+  // ── SPACE BAR ────────────────────────────────────────────
+  const sbPressed = pressedKey && pressedKey.space;
+  const sbDy = sbPressed ? 3 : 0;
+  const SBX = KB.x+60, SBW = KB.w-120, SBY = KB.y+118;
+  rr(SBX, SBY+sbDy+3, SBW, 14, 4, COL.capSh);
+  rr(SBX, SBY+sbDy,   SBW, 14, 4, sbPressed ? COL.capPrs : COL.cap);
+  if(!sbPressed){ctx.fillStyle='rgba(255,255,255,0.45)';ctx.fillRect(SBX+3,SBY+3,SBW-6,4);}
+
+  // ── SHIFT KEYS ───────────────────────────────────────────
+  const r2sx   = rowStartX(keyRows[2].length);
+  const r2end  = r2sx + keyRows[2].length*KSTEP - (KSTEP-KW);
+  const SHCY   = ROW_CY[2];
+  // left shift
+  const lsW = r2sx - KB.x - 18;
+  const lsX = KB.x + 12;
+  if(lsW > 10){
+    rr(lsX, SHCY-KH/2+3, lsW, KH, 4, COL.capSh);
+    rr(lsX, SHCY-KH/2, lsW, KH, 4, COL.cap);
+    ctx.fillStyle='rgba(255,255,255,0.45)'; ctx.fillRect(lsX+3,SHCY-KH/2+3,lsW-6,5);
+    ctx.fillStyle=COL.capText; ctx.font='bold 8px monospace'; ctx.textAlign='center'; ctx.textBaseline='middle';
+    ctx.fillText('⇧', lsX+lsW/2, SHCY);
+  }
+  // right shift
+  const rsX = r2end + 6;
+  const rsW = (KB.x+KB.w-12) - rsX;
+  if(rsW > 10){
+    rr(rsX, SHCY-KH/2+3, rsW, KH, 4, COL.capSh);
+    rr(rsX, SHCY-KH/2, rsW, KH, 4, COL.cap);
+    ctx.fillStyle='rgba(255,255,255,0.45)'; ctx.fillRect(rsX+3,SHCY-KH/2+3,rsW-6,5);
+    ctx.fillStyle=COL.capText; ctx.font='bold 8px monospace'; ctx.textAlign='center'; ctx.textBaseline='middle';
+    ctx.fillText('⇧', rsX+rsW/2, SHCY);
+  }
+}
+
+// ─── Paper overlay positioning ──────────────────────────────────
+const pover = document.getElementById('pover');
+const ptxt  = document.getElementById('ptxt');
+const blink = document.getElementById('blink');
+const FONT_SZ = 10, LINE_H = 14;
+const MAX_CHARS = 24; // chars per line only (line wrap), no line limit
+const PAP_MIN_H = PAP.h; // initial paper height
+const PAP_PAD_TOP = 12, PAP_PAD_BOT = 16;
+
+pover.style.left  = (PAP.x+8) + 'px';
+pover.style.top   = (PAP.y+PAP_PAD_TOP) + 'px';
+pover.style.width = (PAP.w-16) + 'px';
+pover.style.height = 'auto'; // grows with content
+pover.style.overflow = 'visible';
+ptxt.style.fontSize   = FONT_SZ + 'px';
+ptxt.style.lineHeight = LINE_H  + 'px';
+blink.style.width  = '6px';
+blink.style.height = FONT_SZ + 'px';
+
+// ─── Text state ─────────────────────────────────────────────────
+let lines   = [''];
+let lineIdx = 0;
+
+function paperHeight() {
+  // minimum initial height, or enough to fit all lines + padding
+  const needed = PAP_PAD_TOP + lines.length * LINE_H + PAP_PAD_BOT;
+  return Math.max(PAP_MIN_H, needed);
+}
+
+function renderText(){
+  ptxt.textContent = lines.join('\n');
+  // Grow paper on canvas if needed
+  const newH = paperHeight();
+  if(newH !== PAP.h){
+    PAP.h = newH;
+    // Resize canvas to fit taller paper (paper starts at y=20, machine below at PLT.y)
+    // Everything below paper is fixed; just need canvas taller
+    const newCH = Math.max(620, PAP.y + PAP.h + 20);
+    if(newCH !== CH_current){
+      CH_current = newCH;
+      canvas.height = CH_current * DPR;
+      canvas.style.height = CH_current + 'px';
+      // resizing canvas resets transform, must re-scale
+      ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+    }
+    draw();
+  }
+}
+
+// ─── Cursor blink ────────────────────────────────────────────────
+let cursorOn = true;
+setInterval(()=>{
+  cursorOn = !cursorOn;
+  blink.style.opacity = cursorOn ? '1' : '0';
+}, 500);
+
+// ─── Typebar animation ───────────────────────────────────────────
+let tbRaf = null;
+function fireTypebar(){
+  let start = null;
+  if(tbRaf) cancelAnimationFrame(tbRaf);
+  function step(ts){
+    if(!start) start=ts;
+    const p = Math.min((ts-start)/220, 1);
+    // fast up, slow back
+    tbarAnim = p < 0.4 ? (p/0.4) : 1-(p-0.4)/0.6;
+    draw();
+    if(p<1) tbRaf = requestAnimationFrame(step);
+    else { tbarAnim=0; draw(); }
+  }
+  tbRaf = requestAnimationFrame(step);
+}
+
+// ─── Carriage shake ──────────────────────────────────────────────
+function shakeCarriage(){
+  const seq=[3,-2,1,-1,0]; let i=0;
+  function s(){
+    if(i>=seq.length){pover.style.transform='';return;}
+    pover.style.transform=`translateX(${seq[i++]}px)`;
+    setTimeout(s,30);
+  }
+  s();
+}
+
+// ─── Audio ───────────────────────────────────────────────────────
+let ac=null;
+function getAC(){ if(!ac) ac=new(window.AudioContext||window.webkitAudioContext)(); return ac; }
+function noise(dur,gain){
+  try{
+    const a=getAC(),buf=a.createBuffer(1,a.sampleRate*dur,a.sampleRate),d=buf.getChannelData(0);
+    for(let i=0;i<d.length;i++) d[i]=(Math.random()*2-1)*Math.exp(-i/(a.sampleRate*dur*0.18));
+    const src=a.createBufferSource(); src.buffer=buf;
+    const g=a.createGain(); g.gain.value=gain;
+    src.connect(g); g.connect(a.destination); src.start();
+  }catch(e){}
+}
+function tone(freq,dur,gain){
+  try{
+    const a=getAC(),o=a.createOscillator(),g=a.createGain();
+    o.type='sine'; o.frequency.value=freq;
+    g.gain.setValueAtTime(gain,a.currentTime);
+    g.gain.exponentialRampToValueAtTime(0.001,a.currentTime+dur);
+    o.connect(g); g.connect(a.destination); o.start(); o.stop(a.currentTime+dur);
+  }catch(e){}
+}
+function clack(){ noise(0.06,0.30); }
+function ding(){ tone(920,0.38,0.22); }
+function thunk(){ noise(0.10,0.38); }
+
+// ─── Key lookup ──────────────────────────────────────────────────
+function findKey(ch){
+  const u=ch.toUpperCase();
+  for(let r=0;r<keyRows.length;r++){
+    const c=keyRows[r].indexOf(u);
+    if(c!==-1) return {row:r,col:c};
+  }
+  return null;
+}
+
+// ─── Input handling ──────────────────────────────────────────────
+const wrap = document.getElementById('wrap');
+wrap.addEventListener('click', ()=>wrap.focus());
+
+wrap.addEventListener('keydown', e=>{
+  e.preventDefault();
+  const k = e.key;
+
+  if(k==='Backspace'){
+    if(lines[lineIdx].length>0){
+      lines[lineIdx]=lines[lineIdx].slice(0,-1);
+      clack(); fireTypebar(); shakeCarriage();
+    } else if(lineIdx>0){
+      lines.pop(); lineIdx--; thunk();
+    }
+    renderText(); return;
+  }
+
+  if(k==='Enter'){
+    ding(); setTimeout(thunk,200);
+    lineIdx++;
+    if(lines.length<=lineIdx) lines.push('');
+    renderText(); draw();
+    return;
+  }
+
+  if(k.length===1){
+    if(lines[lineIdx].length >= MAX_CHARS){
+      // auto wrap — new line, no limit
+      ding(); setTimeout(thunk,220);
+      lineIdx++;
+      if(lines.length<=lineIdx) lines.push('');
+    }
+    lines[lineIdx] += k;
+    clack(); fireTypebar(); shakeCarriage();
+
+    const kp = findKey(k);
+    if(kp){
+      pressedKey=kp; draw();
+      setTimeout(()=>{ pressedKey=null; draw(); }, 140);
+    } else if(k===' '){
+      pressedKey={space:true}; draw();
+      setTimeout(()=>{ pressedKey=null; draw(); }, 140);
+    }
+    renderText();
+  }
+});
+
+// Initial render
+draw();
+</script>
+</body>
+</html>

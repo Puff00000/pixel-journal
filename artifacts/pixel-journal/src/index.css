@@ -1,0 +1,147 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+
+@custom-variant dark (&:is(.dark *));
+
+@theme inline {
+  --color-background: hsl(var(--background));
+  --color-foreground: hsl(var(--foreground));
+  --color-border: hsl(var(--border));
+  --color-input: hsl(var(--input));
+  --color-ring: hsl(var(--ring));
+  --color-primary: hsl(var(--primary));
+  --color-primary-foreground: hsl(var(--primary-foreground));
+  --font-sans: var(--app-font-sans);
+  --font-mono: var(--app-font-mono);
+}
+
+:root {
+  --background: 45 80% 96%;
+  --foreground: 30 40% 20%;
+  --border: 35 40% 75%;
+  --input: 40 30% 88%;
+  --ring: 40 70% 60%;
+  --primary: 38 90% 55%;
+  --primary-foreground: 30 40% 15%;
+  --app-font-sans: 'Press Start 2P', 'Courier New', monospace;
+  --app-font-mono: 'Courier New', monospace;
+}
+
+@layer base {
+  * { @apply border-border; image-rendering: pixelated; }
+  body {
+    @apply bg-background text-foreground;
+    overflow: hidden;
+    font-family: 'Courier New', monospace;
+  }
+}
+
+.pixel-btn {
+  image-rendering: pixelated;
+  border: 2px solid;
+  cursor: pointer;
+  transition: transform 0.05s, box-shadow 0.05s;
+  box-shadow: 3px 3px 0 0 rgba(0,0,0,0.2);
+  user-select: none;
+}
+.pixel-btn:active {
+  transform: translate(3px, 3px);
+  box-shadow: 0px 0px 0 0 rgba(0,0,0,0.2);
+}
+
+/* scanlines */
+.scanlines::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: repeating-linear-gradient(
+    0deg, transparent, transparent 3px,
+    rgba(0,0,0,0.025) 3px, rgba(0,0,0,0.025) 4px
+  );
+  pointer-events: none;
+  z-index: 10;
+}
+
+@keyframes float-up {
+  0%   { transform: translateY(0) scale(0); opacity: 0; }
+  20%  { opacity: 1; transform: translateY(-10px) scale(1); }
+  100% { transform: translateY(-60px) scale(0.6); opacity: 0; }
+}
+@keyframes grow-flower {
+  0%   { transform: scaleY(0) translateY(20px); opacity: 0; }
+  60%  { transform: scaleY(1.1) translateY(0); opacity: 1; }
+  100% { transform: scaleY(1) translateY(0); opacity: 1; }
+}
+@keyframes uproot-weed {
+  0%   { transform: translateY(0) rotate(0deg); opacity: 1; }
+  40%  { transform: translateY(-8px) rotate(-5deg); opacity: 1; }
+  100% { transform: translateY(-40px) rotate(20deg); opacity: 0; }
+}
+@keyframes sway {
+  0%, 100% { transform: rotate(-2deg); }
+  50%       { transform: rotate(2deg); }
+}
+@keyframes sun-pulse {
+  0%, 100% { transform: scale(1); box-shadow: 0 0 20px rgba(255,200,50,0.4); }
+  50%       { transform: scale(1.05); box-shadow: 0 0 40px rgba(255,200,50,0.7); }
+}
+@keyframes bird-fly {
+  0%   { left: -5%; }
+  100% { left: 105%; }
+}
+@keyframes cursor-blink {
+  0%, 49% { opacity: 1; }
+  50%, 100% { opacity: 0; }
+}
+@keyframes bounce-in {
+  0%   { transform: scale(0.5); opacity: 0; }
+  70%  { transform: scale(1.1); }
+  100% { transform: scale(1); opacity: 1; }
+}
+@keyframes shake {
+  0%, 100% { transform: translateX(0); }
+  25% { transform: translateX(-3px); }
+  75% { transform: translateX(3px); }
+}
+@keyframes twinkle {
+  0%, 100% { opacity: 0.3; transform: scale(0.8); }
+  50% { opacity: 1; transform: scale(1.2); }
+}
+@keyframes cloud-drift {
+  0%   { transform: translateX(0); }
+  100% { transform: translateX(30px); }
+}
+@keyframes pixel-pop {
+  0%   { transform: scale(0) rotate(0deg); opacity: 1; }
+  50%  { transform: scale(1.3) rotate(180deg); opacity: 1; }
+  100% { transform: scale(1) rotate(360deg); opacity: 1; }
+}
+@keyframes heart-stamp {
+  0%   { transform: scale(0) rotate(-15deg); opacity: 0; }
+  40%  { transform: scale(1.4) rotate(5deg);  opacity: 1; }
+  65%  { transform: scale(0.9) rotate(-3deg); opacity: 1; }
+  80%  { transform: scale(1.1) rotate(0deg);  opacity: 1; }
+  100% { transform: scale(1)   rotate(0deg);  opacity: 0.8; }
+}
+@keyframes envelope-fly {
+  0%   { transform: translate(-50%, -50%) scale(1.2); opacity: 1; }
+  60%  { opacity: 1; }
+  100% { transform: translate(calc(50vw - 108px), calc(-50vh + 24px)) scale(0.15); opacity: 0; }
+}
+@keyframes folder-bounce {
+  0%   { transform: scale(1); }
+  30%  { transform: scale(1.25) rotate(-4deg); }
+  55%  { transform: scale(0.9)  rotate(3deg); }
+  75%  { transform: scale(1.08) rotate(-1deg); }
+  100% { transform: scale(1)    rotate(0deg); }
+}
+@keyframes sunflower-grow {
+  0%   { transform: translateX(-50%) scaleY(0) scaleX(0.4); opacity: 0; transform-origin: bottom center; }
+  60%  { transform: translateX(-50%) scaleY(1.08) scaleX(1);  opacity: 1; transform-origin: bottom center; }
+  80%  { transform: translateX(-50%) scaleY(0.95) scaleX(1);  opacity: 1; transform-origin: bottom center; }
+  100% { transform: translateX(-50%) scaleY(1)    scaleX(1);  opacity: 1; transform-origin: bottom center; }
+}
+@keyframes sunflower-sway {
+  0%, 100% { transform: rotate(-1.5deg); transform-origin: bottom center; }
+  50%       { transform: rotate(1.5deg);  transform-origin: bottom center; }
+}

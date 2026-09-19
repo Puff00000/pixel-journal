@@ -1,0 +1,31 @@
+kind = "web"
+previewPath = "/"
+title = "Pixel Journal"
+version = "1.0.0"
+id = "artifacts/pixel-journal"
+router = "path"
+
+[[integratedSkills]]
+name = "react-vite"
+version = "1.0.0"
+
+[[services]]
+name = "web"
+paths = [ "/" ]
+localPort = 19493
+
+[services.development]
+run = "pnpm --filter @workspace/pixel-journal run dev"
+
+[services.production]
+build = [ "pnpm", "--filter", "@workspace/pixel-journal", "run", "build" ]
+publicDir = "artifacts/pixel-journal/dist/public"
+serve = "static"
+
+[[services.production.rewrites]]
+from = "/*"
+to = "/index.html"
+
+[services.env]
+PORT = "19493"
+BASE_PATH = "/"
