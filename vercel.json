@@ -1,0 +1,8 @@
+{
+  "buildCommand": "pnpm --filter @workspace/pixel-journal run build",
+  "outputDirectory": "artifacts/pixel-journal/dist/public",
+  "rewrites": [
+    { "source": "/api/:path*", "destination": "/api" },
+    { "source": "/(.*)", "destination": "/index.html" }
+  ]
+}
